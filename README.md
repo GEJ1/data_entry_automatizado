@@ -19,11 +19,71 @@ mismo: cambia un archivo.
 
 Lo interesante no es el parser: es que **cada pieza se pueda cambiar sola**.
 
+En el diagrama, lo que está `[ entre corchetes ]` es **código** —las piezas que
+se reemplazan— y lo que está suelto son **datos**: la misma información cambiando
+de forma. Cada flecha es un punto donde cambia de quién es la responsabilidad.
+
 ```
-archivo ──[Extractor]──> FichaCruda ──> Cliente ──> ItemDeCarga ──[Cargador]──> web
-  PDF                    (texto crudo)  (validado)   (qué escribir)             form
-  DOCX
+      PDF ─┐
+           ├──[ Extractor ]──→   FichaCruda        texto crudo, sin interpretar
+     DOCX ─┘         ▲                             (cabecera + tablas de strings)
+                     │
+                     └── otro FORMATO se enchufa acá: una clase en pipeline/extractores/
+
+                                      │
+                                      ▼
+                      [ Dominio ]──→   Cliente      ya tipado y validado
+                            ▲                       (date, Decimal, int, y los problemas)
+                            │
+                            └── otro RUBRO se enchufa acá: pipeline/dominio/esquema.py
+
+                                      │
+                                      ▼
+                                  lote.jsonl        fuente de verdad, en disco
+                                      │             (se puede cortar y retomar acá)
+                        ┌─────────────┴─────────────┐
+                        ▼                           ▼
+                   lote.xlsx                   ItemDeCarga    qué escribir, y con qué clave
+          resumen / detalle / problemas             │
+              (revisión humana)                     ▼
+                                        [ Cargador ]──→  formulario web
+                                              ▲
+                                              └── otra WEB se enchufa acá:
+                                                  config/mapeo_web.yaml
 ```
+
+Cada etapa es un comando que lee un archivo y escribe otro:
+
+```
+python -m pipeline.cli extraer   lote.pdf      →  lote.jsonl
+python -m pipeline.cli revisar   lote.jsonl    →  lote.xlsx
+python -m pipeline.cli cargar    lote.jsonl    →  la web
+```
+
+### El mismo dato, en cada forma
+
+Una fila del PDF (una referencia comercial), atravesando el pipeline:
+
+| | Antigüedad | Crédito otorgado | Plazo |
+|---|---|---|---|
+| **FichaCruda** (texto crudo) | `'12/5/2006'` | `'1'` | `'30'` |
+| **Cliente** (validado) | `date(2006, 5, 12)` | `Decimal('1')` | `30` |
+| **ItemDeCarga** (a escribir) | `'12/05/2006'` | `'1'` | *no se carga* |
+
+El plazo se extrae y se valida, pero no aparece en el `ItemDeCarga`: el
+formulario de destino no tiene ese campo, así que no está en la lista blanca.
+Un dato puede ser perfectamente válido y aun así no corresponder que se escriba.
+
+Que vuelva a ser texto al final no es un rodeo: **ese viaje de ida y vuelta es lo
+que lo normaliza**. Fijate que `12/5/2006` salió como `12/05/2006`. Y es lo único
+que hace posible el caso `"2 meses"`, que sin pasar por `date` no hay manera de
+convertir en una fecha concreta.
+
+La otra razón es que el cargador es tonto a propósito: recibe strings y los
+escribe. Si tuviera que decidir cómo formatear una fecha, ese error aparecería
+recién frente al navegador, que es el peor lugar para descubrirlo.
+
+### Los tres puntos de reemplazo
 
 - ¿Tenés otro **formato de entrada**? Escribí una clase en
   `pipeline/extractores/` que cumpla el contrato y agregala al registro. El
