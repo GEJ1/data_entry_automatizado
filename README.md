@@ -15,13 +15,24 @@ mismo: cambia un archivo.
 > datos reales ni credenciales, y no hace falta acceso a ningún sistema externo:
 > se clona, se instala y corre entero de punta a punta.
 
-[![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GEJ1/data_entry_automatizado/blob/main/curso.ipynb)
+## El curso
 
-**[`curso.ipynb`](curso.ipynb)** recorre todo el pipeline paso a paso, con las
-celdas ya escritas: genera los documentos, verifica el extractor, levanta la web
-y carga las filas. Corre igual en Colab y en local. Como la máquina de Colab no
-tiene pantalla, la web se ve con capturas que saca Playwright; si lo corrés en tu
-máquina podés además mirar el navegador en vivo con `--ver --lento`.
+Tres cuadernos. El primero explica el método, el segundo te lo hace construir, y
+el tercero lo apunta a tu caso.
+
+| | Cuaderno | Dónde corre | Qué hacés |
+|---|---|---|---|
+| [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GEJ1/data_entry_automatizado/blob/main/01_metodo.ipynb) | [`01_metodo`](01_metodo.ipynb) | Colab | Entendés las tres ideas: costuras, ground truth, defensas |
+| [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GEJ1/data_entry_automatizado/blob/main/02_construir.ipynb) | [`02_construir`](02_construir.ipynb) | Colab / local | **Escribís el pipeline vos**, con checkpoints que te corrigen |
+| — | [`03_tu_caso`](03_tu_caso.ipynb) | Tu máquina | Lo adaptás a **tu** archivo y **tu** web |
+
+`02` es un taller, no una lectura: cada paso tiene un ejercicio con `# TODO`, un
+checkpoint que te dice qué falla, una solución plegada por si te trabás, y el
+prompt concreto para pedirle esa pieza a Claude.
+
+> ⚠️ **La etapa de carga se corre en una terminal, no en el cuaderno.** Es a
+> propósito: es el único momento donde ves el navegador llenando los campos en
+> tiempo real, y eso una celda no lo puede mostrar.
 
 ## La idea
 
@@ -248,7 +259,9 @@ demo/
   generar_docx_fake.py   # render DOCX
   captura.py             # screenshot de la web (lo usa el cuaderno)
 tests/verificar_extractor.py
-curso.ipynb              # el recorrido completo, ejecutable
+01_metodo.ipynb          # el método
+02_construir.ipynb       # el taller: lo construís vos
+03_tu_caso.ipynb         # adaptarlo a lo tuyo
 ```
 
 ## Documentación
