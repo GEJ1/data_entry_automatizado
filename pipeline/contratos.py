@@ -90,13 +90,19 @@ class ItemDeCarga:
     no decide nada; si tuviera que decidir, el error aparece recien
     frente al navegador, que es el peor lugar para descubrirlo.
 
+    formulario: a que formulario de la web va esta fila. Una web real tiene
+              varios, y cada uno se llega por un camino distinto. El nombre
+              indexa el bloque correspondiente de config/mapeo_web.yaml.
     clave:    identifica la fila de forma unica y estable. Es la base de la
               idempotencia: si esta clave ya figura OK en el estado, se saltea.
+              Arranca con el nombre del formulario, para que dos formularios
+              distintos no puedan pisarse la clave entre si.
     busqueda: como encontrar la fila en la web (ej: {"cuit": "...",
               "fecha": "09/01/2025", "informante": "AIR COMPUTER"}).
     campos:   que escribir, nombre logico -> valor ya como string.
               Los nombres logicos se traducen a selectores via config/mapeo_web.yaml.
     """
+    formulario: str
     clave: str
     busqueda: dict[str, str]
     campos: dict[str, str]

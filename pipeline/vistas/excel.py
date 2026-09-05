@@ -6,10 +6,15 @@ es una foto derivada. Las correcciones NO vuelven editando el Excel: se corrige
 la regla en el codigo y se re-corre. Si el Excel fuera editable de vuelta, a la
 segunda corrida nadie sabria cual de los dos tiene razon.
 
-Tres hojas, tres preguntas distintas:
-  * Resumen   -> "¿esta todo el mundo?"  (una fila por cliente, para reconciliar)
-  * Detalle   -> "¿este dato quedo bien?" (una fila por referencia, lo que se carga)
+Cuatro hojas, cuatro preguntas distintas:
+  * Resumen   -> "¿esta todo el mundo?"   (una fila por cliente, para reconciliar)
+  * Detalle   -> "¿este dato quedo bien?" (una fila por referencia)
+  * Alertas   -> "¿y los antecedentes?"   (una fila por alerta)
   * Problemas -> "¿que tengo que mirar?"  (solo lo dudoso, idealmente vacia)
+
+Detalle y Alertas son las dos cosas que efectivamente se cargan en la web, una
+por formulario. Van en hojas separadas porque son entidades distintas y se
+revisan distinto, no por prolijidad.
 
 La hoja Problemas es la mas importante: si esta vacia, se puede cargar tranquilo.
 """
@@ -34,6 +39,9 @@ COLS_DETALLE = ["CUIT", "Cliente", "Solicitud", "Fecha", "Informante",
                 "¿Es cliente?", "CO ($)", "CT ($)", "CO (USD)", "CT (USD)",
                 "Condición de venta", "Plazo", "Concepto", "Antigüedad",
                 "Problemas"]
+
+COLS_ALERTAS = ["CUIT", "Cliente", "Fecha", "Alertante", "Tipo", "Estado",
+                "Monto", "Comentarios"]
 
 COLS_PROBLEMAS = ["CUIT", "Cliente", "Problema", "Origen"]
 
@@ -95,6 +103,17 @@ def generar(clientes: list[Cliente], salida: str | Path) -> Path:
                 for celda in detalle[detalle.max_row]:
                     celda.fill = RELLENO_ALERTA
 
+    # -- Alertas: una fila por alerta (el otro formulario que se carga) ------
+    alertas = libro.create_sheet("Alertas")
+    _encabezar(alertas, COLS_ALERTAS)
+    for c in clientes:
+        for a in c.alertas:
+            alertas.append([
+                c.cuit, c.nombre,
+                _texto(a.fecha and a.fecha.strftime("%d/%m/%Y")), a.alertante,
+                a.tipo, a.estado, _texto(a.monto), a.comentarios,
+            ])
+
     # -- Problemas: solo lo dudoso -------------------------------------------
     problemas = libro.create_sheet("Problemas")
     _encabezar(problemas, COLS_PROBLEMAS)
@@ -102,7 +121,7 @@ def generar(clientes: list[Cliente], salida: str | Path) -> Path:
         for p in c.problemas:
             problemas.append([c.cuit, c.nombre, p, c.origen])
 
-    for hoja in (resumen, detalle, problemas):
+    for hoja in (resumen, detalle, alertas, problemas):
         _ajustar_anchos(hoja)
 
     salida = Path(salida)

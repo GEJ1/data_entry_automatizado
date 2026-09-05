@@ -4,18 +4,32 @@ Cargador web con Playwright. Cumple el contrato `Cargador` de contratos.py.
 Sabe navegar; no sabe en que web. Todas las URLs y selectores vienen del Mapeo
 (config/mapeo_web.yaml). Para apuntar a otro sistema se edita ese YAML.
 
-El recorrido por fila es el que impone la web, no el que nos gustaria:
+UNA WEB TIENE VARIOS FORMULARIOS. Este cargador maneja dos, y estan resueltos de
+forma deliberadamente asimetrica:
 
-    buscar por CUIT -> entrar a la solicitud -> ubicar la fila por
-    fecha+informante -> COSECHAR el href del lapiz -> editar
+  * lo que CAMBIA entre formularios es el camino para llegar a la fila, y vive
+    en un metodo chiquito por formulario (`_ir_a_la_tabla`);
+  * lo que NO cambia —lista blanca, escritura, guardado, read-back, verificacion
+    de que no se movio nada de mas— esta escrito UNA sola vez.
+
+Sumar un tercer formulario es agregar un bloque al YAML y un `elif` de tres
+lineas. Lo que no hay que hacer nunca es copiar el cargador entero: las defensas
+se irian despegando entre copias, y la copia que se quede vieja va a ser la que
+pise datos.
+
+Los caminos que maneja hoy:
+
+    referencias:  buscar por CUIT -> entrar a la solicitud -> ubicar la fila -> lapiz
+    alertas:      buscar por CUIT -> entrar a alertas      -> ubicar la fila -> lapiz
 
 El id de la fila no se calcula ni se cachea: se cosecha del href cada vez. Es
 mas lento, y es a proposito: un id inventado escribe en la fila de otro.
 
 Tres defensas, en orden de importancia:
 
-  1. LISTA BLANCA. Solo se escriben los campos que estan en `campos` del mapeo.
-     Un campo fuera de la lista ABORTA la fila; no se escribe "lo que se pueda".
+  1. LISTA BLANCA. Solo se escriben los campos que estan en `campos` del
+     formulario. Un campo fuera de la lista ABORTA la fila; no se escribe "lo
+     que se pueda".
 
   2. NADA MAS SE MOVIO. Se saca una foto de todos los inputs del formulario
      antes y despues. Si cambio algo que no estaba en la lista blanca, la fila
@@ -30,7 +44,7 @@ from __future__ import annotations
 
 from playwright.sync_api import TimeoutError as ErrorDeTimeout, sync_playwright
 
-from pipeline.carga.mapeo import Mapeo
+from pipeline.carga.mapeo import Formulario, Mapeo
 from pipeline.contratos import ItemDeCarga, Resultado
 
 
@@ -76,62 +90,62 @@ class CargadorPlaywright:
         except Exception as e:                      # noqa: BLE001
             return Resultado(item.clave, False, f"{type(e).__name__}: {e}")
 
-    # -- internos ------------------------------------------------------------
+    # -- el recorrido, comun a todos los formularios -------------------------
 
     def _cargar(self, item: ItemDeCarga) -> Resultado:
-        m, p = self.mapeo, self._page
+        p = self._page
+        form = self.mapeo.formulario(item.formulario)
 
         # DEFENSA 1: lista blanca. Antes de abrir nada.
-        fuera = sorted(set(item.campos) - set(m.campos))
+        fuera = sorted(set(item.campos) - set(form.campos))
         if fuera:
             return Resultado(item.clave, False,
-                             f"campos fuera de la lista blanca: {fuera}. "
-                             f"Fila abortada sin tocar la web.")
+                             f"campos fuera de la lista blanca de {item.formulario!r}: "
+                             f"{fuera}. Fila abortada sin tocar la web.")
 
         # 1. buscar por CUIT
-        p.goto(m.url("buscar", cuit=item.busqueda["cuit"]))
-        if p.locator(m.sel("sin_resultados")).count():
+        p.goto(self.mapeo.url_busqueda(item.formulario, cuit=item.busqueda["cuit"]))
+        if p.locator(form.sel("sin_resultados")).count():
             return Resultado(item.clave, False,
                              f"la web no conoce el CUIT {item.busqueda['cuit']}")
 
-        # 2. entrar a la solicitud que corresponde (por titulo, no por posicion)
-        href = self._href_de_solicitud(item.busqueda["solicitud"])
-        if href is None:
-            return Resultado(item.clave, False,
-                             f"no encontre la solicitud {item.busqueda['solicitud']!r}")
-        p.goto(m.base_url + href)
+        # 2. llegar hasta la tabla que contiene la fila (esto SI depende del
+        #    formulario: es lo unico que cambia entre uno y otro)
+        problema = self._ir_a_la_tabla(item, form)
+        if problema:
+            return Resultado(item.clave, False, problema)
 
         # 3. ubicar la fila y cosechar el href del lapiz
         href_edicion, cuantas = self._href_de_edicion(
-            item.busqueda["fecha"], item.busqueda["informante"])
+            form, item.busqueda["fecha"], item.busqueda["quien"])
         if cuantas == 0:
             return Resultado(item.clave, False,
                              f"no hay fila con fecha={item.busqueda['fecha']} "
-                             f"informante={item.busqueda['informante']!r}")
+                             f"y {item.busqueda['quien']!r}")
         if cuantas > 1:
             # No se elige "la primera": eso escribe en la fila equivocada.
             return Resultado(item.clave, False,
-                             f"{cuantas} filas matchean fecha+informante: ambiguo, "
+                             f"{cuantas} filas matchean fecha+nombre: ambiguo, "
                              f"no se carga")
-        p.goto(m.base_url + href_edicion)
+        p.goto(self.mapeo.base_url + href_edicion)
 
         # 4. foto ANTES (para poder probar que no se movio nada de mas)
         antes = self._foto()
 
         for campo, valor in item.campos.items():
-            p.fill(m.campos[campo], valor)
+            p.fill(form.campos[campo], valor)
 
         if self.dry_run:
             return Resultado(item.clave, True,
-                             f"dry-run: formulario completo con {len(item.campos)} "
-                             f"campos, SIN guardar")
+                             f"dry-run: formulario {item.formulario} completo con "
+                             f"{len(item.campos)} campos, SIN guardar")
 
         # 5. guardar y confirmar que el guardado ocurrio
-        p.click(m.sel("boton_guardar"))
-        p.wait_for_selector(m.sel("aviso_guardado"))
+        p.click(form.sel("boton_guardar"))
+        p.wait_for_selector(form.sel("aviso_guardado"))
 
         # 6. READ-BACK: volver a abrir y mirar que quedo de verdad
-        p.goto(m.base_url + href_edicion)
+        p.goto(self.mapeo.base_url + href_edicion)
         despues = self._foto()
 
         difieren = [f"{c}: escribi {v!r}, quedo {despues.get(c)!r}"
@@ -146,13 +160,46 @@ class CargadorPlaywright:
             return Resultado(item.clave, False,
                              f"se modificaron campos fuera de la lista blanca: {tocados}")
 
-        return Resultado(item.clave, True, f"{len(item.campos)} campos cargados y verificados")
+        return Resultado(item.clave, True,
+                         f"{item.formulario}: {len(item.campos)} campos cargados y verificados")
 
-    def _href_de_solicitud(self, titulo: str) -> str | None:
+    # -- lo unico que cambia entre formularios -------------------------------
+
+    def _ir_a_la_tabla(self, item: ItemDeCarga, form: Formulario) -> str | None:
+        """
+        Navega desde la pagina de busqueda hasta la tabla con la fila buscada.
+        Devuelve None si llego bien, o el motivo si no pudo.
+
+        Para sumar un formulario nuevo: un `elif` aca y un bloque en el YAML.
+        """
+        p = self._page
+
+        if item.formulario == "referencias":
+            # Las filas financieras cuelgan de una solicitud: hay que elegir cual.
+            href = self._href_de_solicitud(form, item.busqueda["solicitud"])
+            if href is None:
+                return f"no encontre la solicitud {item.busqueda['solicitud']!r}"
+            p.goto(self.mapeo.base_url + href)
+            return None
+
+        if item.formulario == "alertas":
+            # Las alertas cuelgan del cliente: un solo link y listo.
+            link = p.locator(form.sel("link_alertas"))
+            if link.count() == 0:
+                return "el cliente no tiene seccion de alertas en la web"
+            p.goto(self.mapeo.base_url + link.first.get_attribute("href"))
+            return None
+
+        return (f"no se como navegar hasta el formulario {item.formulario!r}. "
+                f"Agregale un caso a _ir_a_la_tabla().")
+
+    # -- helpers de navegacion -----------------------------------------------
+
+    def _href_de_solicitud(self, form: Formulario, titulo: str) -> str | None:
         """El href de la solicitud cuyo titulo coincide exactamente."""
-        m, p = self.mapeo, self._page
-        for fila in p.locator(m.sel("fila_solicitud")).all():
-            link = fila.locator(m.sel("link_solicitud"))
+        p = self._page
+        for fila in p.locator(form.sel("fila_solicitud")).all():
+            link = fila.locator(form.sel("link_solicitud"))
             if link.count() == 0:
                 continue
             celda = fila.locator("td").first
@@ -160,20 +207,24 @@ class CargadorPlaywright:
                 return link.first.get_attribute("href")
         return None
 
-    def _href_de_edicion(self, fecha: str, informante: str) -> tuple[str | None, int]:
+    def _href_de_edicion(self, form: Formulario, fecha: str,
+                         quien: str) -> tuple[str | None, int]:
         """
         (href del lapiz, cuantas filas matchearon).
+
+        `quien` es el informante en referencias y el alertante en alertas: el
+        selector lo dice el YAML, asi que el codigo no necesita saber cual es.
 
         Se devuelve el conteo a proposito: 2 matches no es "agarra el primero",
         es un error. Ver la trampa de informante+fecha duplicados.
         """
-        m, p = self.mapeo, self._page
+        p = self._page
         encontrados = []
-        for fila in p.locator(m.sel("fila_financiera")).all():
-            f = fila.locator(m.sel("celda_fecha")).inner_text().strip()
-            i = fila.locator(m.sel("celda_informante")).inner_text().strip()
-            if f == fecha and i == informante:
-                lapiz = fila.locator(m.sel("link_editar"))
+        for fila in p.locator(form.sel("fila")).all():
+            f = fila.locator(form.sel("celda_fecha")).inner_text().strip()
+            q = fila.locator(form.sel("celda_quien")).inner_text().strip()
+            if f == fecha and q == quien:
+                lapiz = fila.locator(form.sel("link_editar"))
                 if lapiz.count():
                     encontrados.append(lapiz.first.get_attribute("href"))
         return (encontrados[0] if encontrados else None), len(encontrados)
@@ -210,7 +261,13 @@ class CargadorNulo:
         pass
 
     def cargar(self, item: ItemDeCarga) -> Resultado:
-        fuera = sorted(set(item.campos) - set(self.mapeo.campos))
+        try:
+            form = self.mapeo.formulario(item.formulario)
+        except KeyError as e:
+            return Resultado(item.clave, False, str(e))
+        fuera = sorted(set(item.campos) - set(form.campos))
         if fuera:
-            return Resultado(item.clave, False, f"campos fuera de la lista blanca: {fuera}")
-        return Resultado(item.clave, True, f"simulado: {len(item.campos)} campos")
+            return Resultado(item.clave, False,
+                             f"campos fuera de la lista blanca de {item.formulario!r}: {fuera}")
+        return Resultado(item.clave, True,
+                         f"simulado: {item.formulario}, {len(item.campos)} campos")

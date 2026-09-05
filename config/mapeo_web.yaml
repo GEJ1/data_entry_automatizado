@@ -2,51 +2,75 @@
 #
 # Este es el unico archivo que hay que tocar para apuntar el pipeline a OTRA web.
 # Nada de lo que hay aca esta hardcodeado en el codigo del cargador: el cargador
-# sabe navegar, buscar una fila y escribir campos, pero no sabe en que web.
+# sabe navegar, ubicar una fila y escribir campos, pero no sabe en que web.
 #
-# Para adaptarlo a otro sistema: cambia las URLs y los selectores de abajo.
-# Si la web nueva tiene otros nombres de campo, cambia tambien `campos`.
+# Una web real no tiene UN formulario, tiene varios, y a cada uno se llega por un
+# camino distinto. Por eso hay un bloque por formulario: agregar uno nuevo es
+# agregar un bloque aca (y, si el camino es distinto, un metodo de navegacion en
+# navegador.py). El resto del cargador —lista blanca, read-back, idempotencia—
+# no se toca ni se duplica.
 
 base_url: "http://127.0.0.1:5000"
 
-urls:
-  # {cuit} se reemplaza en tiempo de ejecucion.
-  buscar: "/admin/buscar?cuit={cuit}"
-
-selectores:
-  # -- pagina de busqueda --------------------------------------------------
-  # Como saber si el CUIT no existe (para no quedarse esperando de gusto).
-  sin_resultados: "#sin-resultados"
-  # Filas de solicitudes: se elige la que coincide con el titulo del PDF.
-  fila_solicitud: "table tr"
-  link_solicitud: "a.ver-solicitud"
-
-  # -- pagina de la solicitud ----------------------------------------------
-  titulo_solicitud: "#titulo-solicitud"
-  fila_financiera: "tr.fila-financiera"
-  celda_fecha: "td.fecha"
-  celda_informante: "td.informante"
-  # El lapiz. Su href es la UNICA fuente del id de la fila: no se calcula,
-  # se cosecha. Por eso hay que navegar hasta aca si o si.
-  link_editar: "a.editar"
-
-  # -- formulario de edicion -----------------------------------------------
-  boton_guardar: "#guardar"
-  # Confirmacion de que el guardado ocurrio de verdad.
-  aviso_guardado: "#aviso-guardado"
-
-# LISTA BLANCA: los unicos campos que el pipeline puede escribir.
-# Clave = nombre logico (el que arma el pipeline). Valor = selector en la web.
-# Escribir un campo que no este aca ABORTA la fila. No es una convencion: es
-# una defensa. La web tiene ademas Monto Asegurado / Seguro / Doc, que se
-# pisarian sin ruido si esta lista no existiera.
-campos:
-  condicion:         "#condicion"
-  credito_otorgado:  "#credito_otorgado"
-  credito_tomado:    "#credito_tomado"
-  otorgado_usd:      "#otorgado_usd"
-  tomado_usd:        "#tomado_usd"
-  antiguedad:        "#antiguedad"
-
 # Milisegundos de espera maxima por cada paso de navegacion.
 timeout_ms: 5000
+
+formularios:
+
+  # -----------------------------------------------------------------------
+  # Filas financieras. Cuelgan de una SOLICITUD del cliente:
+  #   buscar por CUIT -> entrar a la solicitud -> ubicar la fila -> lapiz
+  # -----------------------------------------------------------------------
+  referencias:
+    url_busqueda: "/admin/buscar?cuit={cuit}"
+    selectores:
+      # Como saber si el CUIT no existe (para no quedarse esperando de gusto).
+      sin_resultados: "#sin-resultados"
+      # Se elige la solicitud cuyo titulo coincide con el del documento.
+      fila_solicitud: "table tr"
+      link_solicitud: "a.ver-solicitud"
+      # Dentro de la solicitud, la fila se ubica por fecha + informante.
+      fila: "tr.fila-financiera"
+      celda_fecha: "td.fecha"
+      celda_quien: "td.informante"
+      # El lapiz. Su href es la UNICA fuente del id de la fila: no se calcula,
+      # se cosecha. Por eso hay que navegar hasta aca si o si.
+      link_editar: "a.editar"
+      boton_guardar: "#guardar"
+      aviso_guardado: "#aviso-guardado"
+    # LISTA BLANCA: los unicos campos que el pipeline puede escribir aca.
+    # Escribir un campo que no este en la lista ABORTA la fila. No es una
+    # convencion: es una defensa. Este formulario tiene ademas Monto Asegurado,
+    # Seguro y Doc, que se pisarian sin ruido si esta lista no existiera.
+    campos:
+      condicion:         "#condicion"
+      credito_otorgado:  "#credito_otorgado"
+      credito_tomado:    "#credito_tomado"
+      otorgado_usd:      "#otorgado_usd"
+      tomado_usd:        "#tomado_usd"
+      antiguedad:        "#antiguedad"
+
+  # -----------------------------------------------------------------------
+  # Alertas / denuncias. Cuelgan del CLIENTE, no de una solicitud, asi que el
+  # camino es mas corto:
+  #   buscar por CUIT -> entrar a alertas -> ubicar la fila -> lapiz
+  # Mismo cargador, misma lista blanca, mismo read-back. Solo cambia el camino.
+  # -----------------------------------------------------------------------
+  alertas:
+    url_busqueda: "/admin/buscar?cuit={cuit}"
+    selectores:
+      sin_resultados: "#sin-resultados"
+      link_alertas: "a.ver-alertas"
+      fila: "tr.fila-alerta"
+      celda_fecha: "td.fecha"
+      celda_quien: "td.alertante"
+      link_editar: "a.editar"
+      boton_guardar: "#guardar"
+      aviso_guardado: "#aviso-guardado"
+    # El expediente NO esta en la lista: es un dato del sistema legal que el
+    # pipeline no debe tocar, y esta ahi justamente para poder demostrarlo.
+    campos:
+      tipo:         "#tipo"
+      estado:       "#estado"
+      monto:        "#monto"
+      comentarios:  "#comentarios"

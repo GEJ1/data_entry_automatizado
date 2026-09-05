@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block contenido %}
+<p><a href="/admin/clientes/{{ cliente.cuit }}/alertas">&larr; volver a las alertas</a></p>
+<h2>Editar alerta</h2>
+<p>
+  <strong id="nombre-cliente">{{ cliente.nombre }}</strong> ({{ cliente.cuit }})<br>
+  <small>Alerta #{{ fila.id }} &middot; {{ fila.fecha }} &middot; {{ fila.alertante }}</small>
+</p>
+
+<form method="post">
+  <fieldset>
+    <legend>Datos de la alerta (no editables)</legend>
+    <div class="campo"><label>Fecha</label><span id="ro-fecha">{{ fila.fecha }}</span></div>
+    <div class="campo"><label>Alertante</label><span id="ro-alertante">{{ fila.alertante }}</span></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Detalle</legend>
+    {% for c in editables %}
+    <div class="campo">
+      <label for="{{ c }}">{{ c.replace('_', ' ')|capitalize }}</label>
+      <input type="text" id="{{ c }}" name="{{ c }}" value="{{ fila[c] }}">
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="prohibidos">
+    <legend>Expediente legal — NO tocar desde el pipeline</legend>
+    {% for c in prohibidos %}
+    <div class="campo">
+      <label for="{{ c }}">{{ c.replace('_', ' ')|capitalize }}</label>
+      <input type="text" id="{{ c }}" name="{{ c }}" value="{{ fila[c] }}">
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit" id="guardar">Guardar</button>
+</form>
+{% endblock %}

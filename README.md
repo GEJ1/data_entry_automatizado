@@ -90,6 +90,9 @@ recién frente al navegador, que es el peor lugar para descubrirlo.
   resto del pipeline no se entera. Vienen dos (PDF y DOCX) justamente para
   demostrarlo: producen exactamente el mismo resultado.
 - ¿Tenés otra **web de destino**? Editá `config/mapeo_web.yaml`. Cero código.
+- ¿La web tiene **varios formularios**? Ya son dos (referencias y alertas), y se
+  llega a ellos por caminos distintos. Lo único que se duplica es la navegación;
+  las defensas están escritas una sola vez.
 - ¿Tenés **otro dominio**? Reescribí `pipeline/dominio/esquema.py` (qué entidades
   hay y cómo se llaman las columnas). Los normalizadores de al lado —fechas,
   montos, identificadores, texto sucio— sobreviven casi intactos, porque el
@@ -156,9 +159,10 @@ documento; que no haya habido excepciones no alcanza.
 python -m pipeline.cli revisar data/salida/lote17.jsonl
 ```
 
-Tres hojas, tres preguntas: **Resumen** (¿está todo el mundo?), **Detalle**
-(¿este dato quedó bien?) y **Problemas** (¿qué tengo que mirar?). Si la hoja
-Problemas está vacía, se puede cargar tranquilo.
+Cuatro hojas, cuatro preguntas: **Resumen** (¿está todo el mundo?), **Detalle**
+(¿este dato quedó bien?), **Alertas** (¿y los antecedentes?) y **Problemas**
+(¿qué tengo que mirar?). Si la hoja Problemas está vacía, se puede cargar
+tranquilo.
 
 > El Excel es una vista **derivada**. Las correcciones no vuelven editando el
 > Excel: se corrige la regla en el código y se re-corre.
@@ -221,14 +225,15 @@ pipeline/
     comun.py             # lo que comparten todos los formatos
     pdf_plumber.py       # PDF
     docx_.py             # DOCX
-  vistas/excel.py        # las tres hojas
+  vistas/excel.py        # las cuatro hojas
   carga/
     mapeo.py             # lee config/mapeo_web.yaml
     items.py             # Cliente -> qué escribir, con qué clave
     navegador.py         # Playwright + las defensas
     estado.py            # idempotencia en SQLite
 config/mapeo_web.yaml    # <- lo único que se toca para apuntar a otra web
-web_demo/                # la web falsa de destino (Flask + SQLite)
+                         #    (un bloque por formulario de destino)
+web_demo/                # la web falsa de destino (Flask + SQLite, 2 formularios)
 demo/
   datos_fake.py          # los datos y el ground truth
   generar_pdf_fake.py    # render PDF

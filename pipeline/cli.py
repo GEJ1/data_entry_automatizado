@@ -95,8 +95,12 @@ def cmd_cargar(args) -> int:
     if args.limite:
         items = items[:args.limite]
 
+    from collections import Counter
+    por_form = Counter(i.formulario for i in items)
+
     print(f"web:       {mapeo.base_url}")
-    print(f"filas:     {len(items)} cargables")
+    print(f"filas:     {len(items)} cargables  "
+          f"({', '.join(f'{n} en {f}' for f, n in sorted(por_form.items()))})")
     if conflictos:
         # No se cargan: en la web las dos filas matchean igual y no hay forma
         # de saber cual es cual. Se informan para resolverlos a mano.

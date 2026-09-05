@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block contenido %}
+{% if request.args.get('guardada') %}
+  <div class="aviso" id="aviso-guardado">Alerta {{ request.args.get('guardada') }} guardada.</div>
+{% endif %}
+<p><a href="/admin/buscar?cuit={{ cliente.cuit }}">&larr; volver</a></p>
+<h2>{{ cliente.nombre }} <small>({{ cliente.cuit }})</small></h2>
+<h3>Alertas / Denuncias</h3>
+
+<table id="tabla-alertas">
+  <tr>
+    <th>Fecha</th><th>Alertante</th><th>Tipo</th><th>Estado</th>
+    <th>Monto</th><th>Comentarios</th><th>Expediente</th><th></th>
+  </tr>
+  {% for f in filas %}
+  <tr class="fila-alerta">
+    <td class="fecha">{{ f.fecha }}</td>
+    <td class="alertante">{{ f.alertante }}</td>
+    <td>{{ f.tipo }}</td>
+    <td>{{ f.estado }}</td>
+    <td>{{ f.monto }}</td>
+    <td>{{ f.comentarios }}</td>
+    <td>{{ f.expediente }}</td>
+    <td>
+      <a class="editar" title="Editar"
+         href="/admin/clientes/{{ cliente.cuit }}/alertas/{{ f.id }}/edit">&#9998;</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

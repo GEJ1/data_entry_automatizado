@@ -29,6 +29,9 @@ enchufar otro formato de entrada u otra web sin tocar el resto. De ahí:
   línea en su `__init__.py`. Hay dos (PDF y DOCX) justamente para probar que el
   contrato aguanta: producen FichaCruda idénticas.
 - **Otra web objetivo** = editar `config/mapeo_web.yaml`. Cero código.
+- **Otro formulario en la misma web** = un bloque en el YAML + un `elif` en
+  `_ir_a_la_tabla()`. Lo que NO se hace nunca es copiar el cargador: las
+  defensas se despegarían entre copias, y la copia vieja es la que pisa datos.
 - **Otro dominio** = reescribir `pipeline/dominio/esquema.py`. Los normalizadores
   de al lado no se tocan: fechas ambiguas, montos con separadores raros e
   identificadores con dígito verificador aparecen en cualquier data entry.
@@ -55,14 +58,22 @@ enchufar otro formato de entrada u otra web sin tocar el resto. De ahí:
   y nada más. Toda interpretación vive en `pipeline/dominio/`. Es lo que permite
   que PDF y DOCX compartan el mismo dominio.
 - **Idempotencia**: estado por fila en SQLite (`data/salida/estado_carga.db`),
-  clave compuesta `(cliente, solicitud, fecha, informante)`. Se corta y se
+  clave compuesta que **arranca con el nombre del formulario**
+  (`referencias|cuit|solicitud|fecha|informante`, `alertas|cuit|fecha|alertante`).
+  El prefijo no es cosmético: el estado es una sola tabla para todo el lote, y
+  sin él dos formularios podrían pisarse la clave. Se corta y se
   retoma sin duplicar. Ojo: `--dry-run` y `--simular` NO anotan estado, porque
   si anotaran, la corrida real saltearía filas que nunca se escribieron.
-- **Lista blanca de campos escribibles**: SOLO Condición, Crédito Otorgado,
-  Crédito Tomado, Otorgado USD, Tomado USD, Antigüedad (`campos` en el YAML).
-  NUNCA Monto Asegurado, Seguro ni Doc. Está verificada, no declamada: el
-  cargador fotografía todos los inputs antes y después y falla si se movió algo
-  fuera de la lista.
+- **Lista blanca de campos escribibles**, una por formulario (`campos` en el
+  YAML). En referencias: SOLO Condición, Crédito Otorgado, Crédito Tomado,
+  Otorgado USD, Tomado USD, Antigüedad — NUNCA Monto Asegurado, Seguro ni Doc.
+  En alertas: SOLO Tipo, Estado, Monto, Comentarios — NUNCA el expediente.
+  Está verificada, no declamada: el cargador fotografía todos los inputs antes
+  y después y falla si se movió algo fuera de la lista.
+- **La navegación es lo único que cambia entre formularios.** Las referencias
+  cuelgan de una solicitud y las alertas del cliente, así que el camino difiere;
+  todo lo demás (lista blanca, escritura, guardado, read-back, verificación) está
+  escrito una sola vez y lo comparten.
 - **Read-back**: después de guardar se reabre el formulario y se compara. Que el
   submit no explote no significa que el dato entró.
 - **Campos en None no se escriben** (no se manda ""): pisar con vacío un dato
@@ -97,12 +108,14 @@ sección entera se reemplaza; las de arriba y abajo no.
 - **Qué tabla es cuál** se decide por sus ENCABEZADOS ("Informante" ⇒
   referencias, "Alertante" ⇒ alertas), no por el título de sección: la página de
   continuación no lo repite.
-- **PDF**: el título del subgrupo ("Solicitud hecha el X por Y") es una celda
-  combinada y `extract()` lo devuelve **truncado** al ancho de la primera
-  columna. Hay que rescatarlo de las líneas de texto cruzando por posición
-  vertical (`_titulo_subgrupo`). Importa: la solicitud es parte de la clave.
-- **DOCX**: la misma celda combinada se devuelve **repetida** en las 12
-  columnas. Además `doc.paragraphs` y `doc.tables` pierden el orden entre sí:
+- **Las filas de subgrupo no son datos.** "Solicitud hecha el X por Y" es una
+  celda combinada que abarca las 12 columnas; hay que detectarla y bajar ese
+  título a las filas que le siguen, porque la solicitud es parte de la clave.
+  Cada librería la entrega distinto: **pdfplumber** devuelve el título en la
+  primera celda y `None` en las otras once; **python-docx** lo devuelve
+  **repetido** en las doce. Distinta maña, misma detección de fondo (una sola
+  celda con texto ⇒ es un título, no una fila).
+- **DOCX**: además, `doc.paragraphs` y `doc.tables` pierden el orden entre sí:
   hay que recorrer el cuerpo del XML a mano (`_bloques`).
 
 ## Estado
@@ -114,9 +127,9 @@ Todo el pipeline anda end-to-end contra `web_demo/`.
 | Normalizadores + dominio | listo, smoke tests propios |
 | Extractor PDF (pdfplumber) | listo, 300/300 fichas vs ground truth |
 | Extractor DOCX (python-docx) | listo, 300/300, salida idéntica al PDF |
-| Vistas Excel (3 hojas) | listo |
-| Web demo (Flask + SQLite) | listo |
-| Carga web (Playwright) | listo: 73/73 con read-back, idempotente |
+| Vistas Excel (4 hojas) | listo |
+| Web demo (Flask + SQLite) | listo: dos formularios |
+| Carga web (Playwright) | listo: 80/80 con read-back, idempotente |
 
 Verificación: el generador emite un **ground truth** (`<archivo>.verdad.json`)
 con lo que el extractor debería devolver, y `tests/verificar_extractor.py`
@@ -124,6 +137,5 @@ compara. Mirar columnas a ojo no escala más allá del tercer cliente.
 
 ## Lo que quedó pendiente
 
-- Las **alertas** se extraen y se validan, pero no se cargan en la web: la web
-  demo sólo tiene el formulario de referencias. Queda como ejercicio guiado
-  para el curso: los datos ya están en el JSONL y el contrato ya está definido.
+Nada del pipeline: las dos entidades del documento (referencias y alertas) se
+extraen, se validan, se revisan y se cargan de punta a punta.

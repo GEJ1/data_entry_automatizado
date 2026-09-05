@@ -12,13 +12,14 @@ Las tres trampas que resuelve (y que motivan casi todo el codigo de abajo):
    encabezados de columna). Por eso se streamea el documento entero y se corta
    por el encabezado `Cliente: ... (CUIT: ...)`, nunca pagina por pagina.
 
-2. EL TITULO DEL SUBGRUPO VIENE TRUNCADO. Las filas "Solicitud hecha el X por Y"
-   son una celda combinada que se desborda de la primera columna: pdfplumber
-   recorta el texto al ancho de esa columna y devuelve solo "Solicitud hecha el".
-   El titulo completo hay que rescatarlo de las lineas de texto de la pagina,
-   cruzando por posicion vertical. Ver _titulo_subgrupo().
-   Importa porque la solicitud forma parte de la clave de idempotencia: con el
-   titulo truncado, dos solicitudes distintas del mismo cliente colisionan.
+2. LAS FILAS DE SUBGRUPO NO SON DATOS. "Solicitud hecha el X por Y" es una celda
+   combinada que abarca las 12 columnas; pdfplumber la devuelve como el titulo
+   completo en la primera celda y None en las otras once. Hay que detectarla
+   (una sola celda con texto) y bajar ese titulo a las filas que le siguen,
+   porque la solicitud forma parte de la clave de idempotencia: sin ella, dos
+   solicitudes distintas del mismo cliente colisionan.
+   Comparar con docx_.py, que recibe la MISMA celda combinada repetida doce
+   veces: distinta maña de la libreria, misma deteccion de fondo.
 
 3. QUE TABLA ES CUAL. En vez de adivinar por posicion o por el titulo de seccion
    (que la pagina de continuacion no repite), se mira el ENCABEZADO de la tabla:
@@ -92,7 +93,7 @@ class ExtractorPDF:
                         if n_pag not in paginas:
                             paginas.append(n_pag)
                         solicitud = self._volcar_tabla(
-                            dato, lineas, ficha, solicitud, ruta, n_pag)
+                            dato, ficha, solicitud, ruta, n_pag)
 
         if ficha is not None:
             ficha.origen = self._origen(ruta, paginas)
@@ -108,7 +109,7 @@ class ExtractorPDF:
         rango = str(paginas[0]) if len(paginas) == 1 else f"{paginas[0]}-{paginas[-1]}"
         return f"{ruta.name} p.{rango}"
 
-    def _volcar_tabla(self, tabla, lineas, ficha: FichaCruda, solicitud: str,
+    def _volcar_tabla(self, tabla, ficha: FichaCruda, solicitud: str,
                       ruta: Path, n_pag: int) -> str:
         """Vuelca una tabla en la ficha. Devuelve el subgrupo vigente al terminar."""
         filas = tabla.extract()
@@ -123,7 +124,7 @@ class ExtractorPDF:
                   f"encabezados={encabezados}", file=sys.stderr)
             return solicitud
 
-        for i, cruda in enumerate(filas[1:], start=1):
+        for cruda in filas[1:]:
             celdas = [_limpiar(c) for c in cruda]
             con_texto = [c for c in celdas if c]
 
@@ -133,7 +134,7 @@ class ExtractorPDF:
             # Fila de subgrupo: una sola celda con texto, y es el titulo.
             if (seccion == "referencias" and len(con_texto) == 1
                     and celdas[0].startswith(PREFIJO_SUBGRUPO)):
-                solicitud = self._titulo_subgrupo(tabla, i, lineas) or celdas[0]
+                solicitud = celdas[0]
                 continue
 
             fila: Fila = dict(zip(encabezados, celdas))
@@ -145,22 +146,3 @@ class ExtractorPDF:
             ficha.tablas[seccion].append(fila)
 
         return solicitud
-
-    @staticmethod
-    def _titulo_subgrupo(tabla, indice_fila: int, lineas) -> str:
-        """
-        Rescata el titulo completo del subgrupo desde las lineas de texto.
-
-        extract() lo devuelve recortado al ancho de la primera columna, asi que
-        se busca por posicion: que lineas de la pagina caen dentro del alto de
-        esta fila. Es feo, pero es la unica forma de recuperar el texto que la
-        celda combinada se comio.
-        """
-        try:
-            fila = tabla.rows[indice_fila]
-        except (AttributeError, IndexError):
-            return ""
-        arriba, abajo = fila.bbox[1], fila.bbox[3]
-        dentro = [_limpiar(ln["text"]) for ln in lineas
-                  if arriba - 1 <= ln["top"] <= abajo + 1]
-        return " ".join(t for t in dentro if t)

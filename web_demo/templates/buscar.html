@@ -11,6 +11,12 @@
   <p class="vacio" id="sin-resultados">No se encontró ningún cliente con ese CUIT.</p>
 {% elif cliente %}
   <h3 id="nombre-cliente">{{ cliente.nombre }} <small>({{ cliente.cuit }})</small></h3>
+
+  {% if n_alertas %}
+    <p><a class="ver-alertas" href="/admin/clientes/{{ cliente.cuit }}/alertas">
+      Alertas / Denuncias ({{ n_alertas }})</a></p>
+  {% endif %}
+
   {% if solicitudes %}
     <table>
       <tr><th>Solicitud</th><th></th></tr>

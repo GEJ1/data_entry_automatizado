@@ -5,9 +5,10 @@ Esa es justamente la situacion real: las filas ya existen en el sistema (alguien
 cargo la solicitud), y lo que falta es completarles los datos financieros a mano,
 uno por uno. El pipeline viene a hacer exactamente ese trabajo.
 
-Lo que se siembra: cliente, solicitud y una fila financiera por referencia, con
-fecha + informante + concepto (que es lo que identifica la fila) y el resto en
-blanco. Tambien se inventa un valor de poliza para los campos prohibidos, asi
+Lo que se siembra: cliente, solicitud y una fila financiera por referencia, mas
+una fila de alerta por alerta. En las dos, solo lo que IDENTIFICA la fila
+(fecha + quien la informo) y el resto en blanco. Tambien se inventan valores
+para los campos prohibidos —poliza en referencias, expediente en alertas— asi
 se nota si el cargador los pisa.
 
 Uso:
@@ -33,7 +34,7 @@ def sembrar(ruta_jsonl: str | Path) -> None:
     crear_esquema()
 
     con = conectar()
-    clientes = solicitudes = filas = 0
+    clientes = solicitudes = filas = alertas = 0
 
     for c in jsonl.leer(ruta_jsonl):
         con.execute("INSERT OR REPLACE INTO clientes (cuit, nombre) VALUES (?, ?)",
@@ -61,12 +62,24 @@ def sembrar(ruta_jsonl: str | Path) -> None:
                  random.choice(["A-1", "B-2", "C-3"])))
             filas += 1
 
+        for a in c.alertas:
+            con.execute(
+                "INSERT INTO alertas (cuit, fecha, alertante, expediente)"
+                " VALUES (?, ?, ?, ?)",
+                (c.cuit,
+                 a.fecha.strftime("%d/%m/%Y") if a.fecha else "",
+                 a.alertante,
+                 # expediente preexistente: si el cargador lo pisa, se ve
+                 f"EXP-{random.randint(1000, 9999)}/{random.randint(18, 26)}"))
+            alertas += 1
+
     con.commit()
     con.close()
     print(f"sembrado en {DB}")
     print(f"  clientes     {clientes}")
     print(f"  solicitudes  {solicitudes}")
-    print(f"  filas a completar  {filas}")
+    print(f"  filas financieras a completar  {filas}")
+    print(f"  alertas a completar            {alertas}")
 
 
 if __name__ == "__main__":

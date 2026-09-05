@@ -11,14 +11,22 @@ En particular, el ID de la fila a editar NO se puede calcular: hay que buscar
 por CUIT, entrar a la solicitud y cosechar el href del lapiz. Igual que en una
 web real, donde los ids son internos y no estan en el documento de origen.
 
-    /                                              buscador por CUIT
-    /admin/buscar?cuit=...                         solicitudes de ese cliente
-    /admin/solicitudes/<sid>                       tabla de filas financieras
-    /admin/solicitudes/<sid>/financieras/<fid>/edit    el formulario
+    /                                                  buscador por CUIT
+    /admin/buscar?cuit=...                             solicitudes y alertas del cliente
+    /admin/solicitudes/<sid>                           tabla de filas financieras
+    /admin/solicitudes/<sid>/financieras/<fid>/edit    formulario de referencias
+    /admin/clientes/<cuit>/alertas                     tabla de alertas
+    /admin/clientes/<cuit>/alertas/<aid>/edit          formulario de alertas
 
-El formulario incluye A PROPOSITO campos que NO hay que tocar (Monto Asegurado,
-Seguro, Doc). Estan ahi para que la lista blanca del cargador sea una defensa
-real y no un comentario: si el cargador se equivoca, se ve.
+Hay DOS formularios a proposito, y se llega a ellos por caminos distintos: las
+filas financieras cuelgan de una solicitud, las alertas cuelgan del cliente. Es
+lo que obliga a que el cargador trate la navegacion como configuracion en vez de
+tenerla hardcodeada.
+
+Cada formulario incluye A PROPOSITO campos que NO hay que tocar (Monto Asegurado,
+Seguro y Doc en referencias; el numero de expediente en alertas). Estan ahi para
+que la lista blanca del cargador sea una defensa real y no un comentario: si el
+cargador se equivoca, se ve.
 
 Uso:
     python web_demo/sembrar.py data/salida/lote17.jsonl
@@ -34,13 +42,15 @@ from flask import Flask, g, redirect, render_template, request, url_for
 BASE = Path(__file__).resolve().parent
 DB = BASE / "datos.db"
 
-# Las columnas que el formulario deja editar. La lista blanca del cargador
+# Las columnas que cada formulario deja editar. La lista blanca del cargador
 # tiene que ser un subconjunto de esta: si no coinciden, algo se desincronizo.
 CAMPOS_EDITABLES = ["condicion", "credito_otorgado", "credito_tomado",
                     "otorgado_usd", "tomado_usd", "antiguedad"]
+CAMPOS_EDITABLES_ALERTA = ["tipo", "estado", "monto", "comentarios"]
 
 # Campos que se muestran y se guardan, pero que el pipeline NUNCA debe tocar.
 CAMPOS_PROHIBIDOS = ["monto_asegurado", "seguro", "doc"]
+CAMPOS_PROHIBIDOS_ALERTA = ["expediente"]
 
 app = Flask(__name__)
 
@@ -95,6 +105,19 @@ CREATE TABLE IF NOT EXISTS financieras (
     seguro            TEXT DEFAULT '',
     doc               TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS alertas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    cuit         TEXT NOT NULL REFERENCES clientes(cuit),
+    fecha        TEXT NOT NULL,      -- identifica la fila, no se edita
+    alertante    TEXT NOT NULL,      -- identifica la fila, no se edita
+    -- editables por el pipeline
+    tipo         TEXT DEFAULT '',
+    estado       TEXT DEFAULT '',
+    monto        TEXT DEFAULT '',
+    comentarios  TEXT DEFAULT '',
+    -- NUNCA lo toca el pipeline: es del sistema legal
+    expediente   TEXT DEFAULT ''
+);
 """
 
 
@@ -122,12 +145,14 @@ def buscar():
     cuit = (request.args.get("cuit") or "").strip()
     db = get_db()
     cliente = db.execute("SELECT * FROM clientes WHERE cuit = ?", (cuit,)).fetchone()
-    solicitudes = []
+    solicitudes, n_alertas = [], 0
     if cliente:
         solicitudes = db.execute(
             "SELECT * FROM solicitudes WHERE cuit = ? ORDER BY id", (cuit,)).fetchall()
+        n_alertas = db.execute(
+            "SELECT COUNT(*) FROM alertas WHERE cuit = ?", (cuit,)).fetchone()[0]
     return render_template("buscar.html", cuit=cuit, cliente=cliente,
-                           solicitudes=solicitudes)
+                           solicitudes=solicitudes, n_alertas=n_alertas)
 
 
 @app.route("/admin/solicitudes/<int:sid>")
@@ -164,6 +189,39 @@ def editar(sid: int, fid: int):
     cliente = db.execute("SELECT * FROM clientes WHERE cuit = ?", (sol["cuit"],)).fetchone()
     return render_template("editar.html", fila=fila, sol=sol, cliente=cliente,
                            editables=CAMPOS_EDITABLES, prohibidos=CAMPOS_PROHIBIDOS)
+
+
+@app.route("/admin/clientes/<cuit>/alertas")
+def alertas(cuit: str):
+    db = get_db()
+    cliente = db.execute("SELECT * FROM clientes WHERE cuit = ?", (cuit,)).fetchone()
+    if cliente is None:
+        return "Cliente inexistente", 404
+    filas = db.execute(
+        "SELECT * FROM alertas WHERE cuit = ? ORDER BY id", (cuit,)).fetchall()
+    return render_template("alertas.html", cliente=cliente, filas=filas)
+
+
+@app.route("/admin/clientes/<cuit>/alertas/<int:aid>/edit", methods=["GET", "POST"])
+def editar_alerta(cuit: str, aid: int):
+    db = get_db()
+    fila = db.execute("SELECT * FROM alertas WHERE id = ? AND cuit = ?",
+                      (aid, cuit)).fetchone()
+    if fila is None:
+        return "Alerta inexistente", 404
+
+    if request.method == "POST":
+        campos = CAMPOS_EDITABLES_ALERTA + CAMPOS_PROHIBIDOS_ALERTA
+        valores = [request.form.get(c, "") for c in campos]
+        db.execute(f"UPDATE alertas SET {', '.join(c + ' = ?' for c in campos)} "
+                   f"WHERE id = ?", (*valores, aid))
+        db.commit()
+        return redirect(url_for("alertas", cuit=cuit) + f"?guardada={aid}")
+
+    cliente = db.execute("SELECT * FROM clientes WHERE cuit = ?", (cuit,)).fetchone()
+    return render_template("editar_alerta.html", fila=fila, cliente=cliente,
+                           editables=CAMPOS_EDITABLES_ALERTA,
+                           prohibidos=CAMPOS_PROHIBIDOS_ALERTA)
 
 
 if __name__ == "__main__":
