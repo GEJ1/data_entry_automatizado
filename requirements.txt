@@ -4,3 +4,8 @@ reportlab>=4.0
 pdfplumber>=0.11
 # Para la etapa de carga web (aún no implementada) se sumará:
 # playwright>=1.40   (requiere además: playwright install)
+python-docx>=1.1
+openpyxl>=3.1
+flask>=3.0
+pyyaml>=6.0
+playwright>=1.40   # requiere ademas: playwright install chromium

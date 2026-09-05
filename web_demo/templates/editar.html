@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block contenido %}
+<p><a href="/admin/solicitudes/{{ sol.id }}">&larr; volver a la solicitud</a></p>
+<h2>Editar fila financiera</h2>
+<p>
+  <strong id="nombre-cliente">{{ cliente.nombre }}</strong> ({{ cliente.cuit }})<br>
+  <span id="titulo-solicitud">{{ sol.titulo }}</span><br>
+  <small>Fila #{{ fila.id }} · {{ fila.fecha }} · {{ fila.informante }}</small>
+</p>
+
+<form method="post">
+  <fieldset>
+    <legend>Datos de la fila (no editables)</legend>
+    <div class="campo"><label>Fecha</label><span id="ro-fecha">{{ fila.fecha }}</span></div>
+    <div class="campo"><label>Informante</label><span id="ro-informante">{{ fila.informante }}</span></div>
+    <div class="campo"><label>Concepto</label><span id="ro-concepto">{{ fila.concepto }}</span></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Datos financieros</legend>
+    {% for c in editables %}
+    <div class="campo">
+      <label for="{{ c }}">{{ c.replace('_', ' ')|capitalize }}</label>
+      <input type="text" id="{{ c }}" name="{{ c }}" value="{{ fila[c] }}">
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="prohibidos">
+    <legend>Póliza — NO tocar desde el pipeline</legend>
+    {% for c in prohibidos %}
+    <div class="campo">
+      <label for="{{ c }}">{{ c.replace('_', ' ')|capitalize }}</label>
+      <input type="text" id="{{ c }}" name="{{ c }}" value="{{ fila[c] }}">
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  <button type="submit" id="guardar">Guardar</button>
+</form>
+{% endblock %}

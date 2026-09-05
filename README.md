@@ -1,118 +1,183 @@
-# Carga de Solicitudes Financieras
+# data_entry_automatizado
 
-Pipeline para automatizar una tarea de data entry: leer un PDF con datos de
-muchos clientes, **validar y normalizar** esa información, y **cargarla en un
-formulario web**, fila por fila, de forma confiable y repetible.
+Un esqueleto para automatizar **cualquier** tarea de data entry: leer datos de
+un archivo, **validarlos y normalizarlos**, y **cargarlos en un formulario web**,
+fila por fila, de forma confiable y repetible.
 
-> Proyecto en construcción, pensado también como ejemplo educativo. Los datos de
-> demostración son 100% inventados. **No hay datos reales ni credenciales en este
-> repositorio.**
+El repo trae un caso completo de punta a punta a modo de ejemplo (fichas
+crediticias de clientes: referencias comerciales y alertas), pero **el dominio
+es la pieza reemplazable**, no el punto. Si tu data entry es de facturas, de
+historias clínicas, de inventario o de altas de usuarios, el andamiaje es el
+mismo: cambia un archivo.
 
-## Qué hace
+> Material educativo. **Todo es falso**: los datos, los documentos de entrada y
+> también la web de destino, que viene incluida en el repo (`web_demo/`). No hay
+> datos reales ni credenciales, y no hace falta acceso a ningún sistema externo:
+> se clona, se instala y corre entero de punta a punta.
 
-El flujo tiene cuatro etapas:
+## La idea
 
-1. **Extracción**: lee el PDF (una ficha por cliente, con dos sub-tablas) y arma
-   registros estructurados.
-2. **Validación y normalización**: verifica y limpia cada dato (fechas, montos,
-   CUIT, antigüedad, plazo). Lo dudoso se separa para revisión humana en vez de
-   cargarse a ciegas.
-3. **Revisión**: se genera una vista en Excel para controlar antes de cargar.
-4. **Carga web**: completa el formulario con Playwright, de forma idempotente
-   (se puede cortar y retomar sin duplicar).
-
-El diseño completo, con el porqué de cada decisión, está en
-[`docs/Documento_de_diseño.docx`](docs/Documento_de_diseño.docx).
-
-## Estructura del repo
+Lo interesante no es el parser: es que **cada pieza se pueda cambiar sola**.
 
 ```
-.
-├── src/
-│   └── esquema.py            # Validación y normalización (Pydantic). Núcleo del pipeline.
-├── demo/
-│   └── generar_pdf_fake.py   # Genera PDFs de prueba con casos difíciles sembrados.
-├── docs/
-│   ├── Documento_de_diseño.docx  # Diseño completo del sistema.
-│   └── Manual_de_uso.docx        # Manual para la persona que opere el sistema.
-├── data/
-│   ├── entrada/              # Poné acá los PDF a procesar (vacío en el repo).
-│   └── salida/              # Acá se generan las planillas y reportes.
-├── requirements.txt
-└── README.md
+archivo ──[Extractor]──> FichaCruda ──> Cliente ──> ItemDeCarga ──[Cargador]──> web
+  PDF                    (texto crudo)  (validado)   (qué escribir)             form
+  DOCX
 ```
 
-## Requisitos
+- ¿Tenés otro **formato de entrada**? Escribí una clase en
+  `pipeline/extractores/` que cumpla el contrato y agregala al registro. El
+  resto del pipeline no se entera. Vienen dos (PDF y DOCX) justamente para
+  demostrarlo: producen exactamente el mismo resultado.
+- ¿Tenés otra **web de destino**? Editá `config/mapeo_web.yaml`. Cero código.
+- ¿Tenés **otro dominio**? Reescribí `pipeline/dominio/esquema.py` (qué entidades
+  hay y cómo se llaman las columnas). Los normalizadores de al lado —fechas,
+  montos, identificadores, texto sucio— sobreviven casi intactos, porque el
+  data entry siempre pelea contra los mismos problemas.
 
-- Python 3.10 o superior.
+Los dos enchufes están definidos en [`pipeline/contratos.py`](pipeline/contratos.py).
+Es el archivo por el que conviene empezar a leer.
 
 ## Instalación
 
+Requiere **Python 3.10 o superior**.
+
 ```bash
-git clone <URL-de-tu-repo>
-cd carga-solicitudes-financieras
-
-# Entorno virtual (recomendado)
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Linux / macOS:
-source .venv/bin/activate
-
+python3.10 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+playwright install chromium      # sólo para la etapa de carga web
 ```
 
-## Uso
+Todo se corre desde la raíz del repo.
 
-### 1. Generar PDFs de prueba
+## Recorrido completo
 
-Crea un PDF falso con la misma estructura que los reales y con los casos difíciles
-sembrados a propósito (útil para desarrollar y para el video):
+### 1. Generar los documentos de prueba
+
+Con las mismas trampas sembradas a propósito, en dos formatos:
 
 ```bash
-python demo/generar_pdf_fake.py                       # 15 clientes
-python demo/generar_pdf_fake.py --clientes 300        # escala el volumen
-python demo/generar_pdf_fake.py --salida data/entrada/lote.pdf
+python demo/generar_pdf_fake.py                  # data/entrada/lote17.pdf
+python demo/generar_docx_fake.py                 # data/entrada/lote17.docx
+python demo/generar_pdf_fake.py --clientes 300   # escalar el volumen
 ```
 
-Al correr imprime un **manifiesto** que indica qué cliente muestra qué caso
-(antigüedad en todas sus formas, plazo basura, CUIT inválido, secciones vacías,
-cliente que se derrama a varias páginas, etc.). La salida es reproducible
-(semilla fija).
+Cada uno imprime un **manifiesto** (qué cliente muestra qué trampa: antigüedad
+en todas sus formas, plazo basura, CUIT inválido, secciones vacías, cliente que
+se derrama a varias páginas, filas duplicadas…) y deja al lado un
+`lote17.verdad.json`: el **ground truth**, o sea exactamente lo que un extractor
+correcto debería devolver.
 
-### 2. Validación y normalización
-
-El módulo [`src/esquema.py`](src/esquema.py) define los modelos y las reglas de
-limpieza. Correrlo directamente ejecuta una batería de pruebas rápidas:
+### 2. Verificar el extractor contra el ground truth
 
 ```bash
-python src/esquema.py
+python -m tests.verificar_extractor data/entrada/lote17.pdf
+python -m tests.verificar_extractor data/entrada/lote17.docx
 ```
 
-Para usarlo desde otro código:
+Esto es lo que reemplaza a "mirar las columnas a ojo": un parser puede leer 299
+clientes perfecto y comerse una fila del trescientos, y a ojo no se ve nunca.
 
-```python
-from esquema import parse_antiguedad, parse_plazo, Cliente
-from datetime import date
+### 3. Extraer → JSONL
 
-parse_antiguedad("2 meses", emision=date(2026, 7, 3))  # -> date(2026, 5, 3)
-parse_plazo("3060")                                     # -> (None, True)  (a revisar)
+```bash
+python -m pipeline.cli extraer data/entrada/lote17.pdf
 ```
 
-## Estado del proyecto
+Escribe `data/salida/lote17.jsonl` (un cliente por línea, ya validado) e imprime
+una **reconciliación**: cuántos clientes, cuántas filas, cuántas se descartaron
+por inactivas y qué quedó dudoso. Los números tienen que cerrar contra el
+documento; que no haya habido excepciones no alcanza.
 
-| Etapa | Estado |
-|---|---|
-| Validación y normalización (`esquema.py`) | Listo y probado |
-| Generador de PDFs de prueba | Listo y probado |
-| Parser del PDF (extracción) | Pendiente |
-| Carga web (Playwright) | Pendiente |
+### 4. Revisar en Excel
 
-La etapa de carga web depende de resolver una pieza de diseño (cómo se llega
-desde el CUIT a la solicitud en la web). Ver la sección "Lo que falta definir"
-en el documento de diseño.
+```bash
+python -m pipeline.cli revisar data/salida/lote17.jsonl
+```
+
+Tres hojas, tres preguntas: **Resumen** (¿está todo el mundo?), **Detalle**
+(¿este dato quedó bien?) y **Problemas** (¿qué tengo que mirar?). Si la hoja
+Problemas está vacía, se puede cargar tranquilo.
+
+> El Excel es una vista **derivada**. Las correcciones no vuelven editando el
+> Excel: se corrige la regla en el código y se re-corre.
+
+### 5. Levantar la web falsa y sembrarla
+
+```bash
+python web_demo/sembrar.py data/salida/lote17.jsonl
+python web_demo/app.py            # http://127.0.0.1:5000
+```
+
+Las filas se siembran **vacías**, que es la situación real: ya existen en el
+sistema y lo que falta es completarles los datos financieros a mano.
+
+### 6. Cargar
+
+```bash
+python -m pipeline.cli cargar data/salida/lote17.jsonl --simular          # sin navegador
+python -m pipeline.cli cargar data/salida/lote17.jsonl --dry-run --limite 3
+python -m pipeline.cli cargar data/salida/lote17.jsonl --ver --lento 300  # mirándolo
+python -m pipeline.cli cargar data/salida/lote17.jsonl                    # de verdad
+```
+
+Cortala a la mitad con Ctrl-C y volvé a correrla: retoma donde iba, sin duplicar.
+
+## Las defensas
+
+El principio del proyecto es **convertir errores silenciosos en ruidosos**. Un
+dato que "se ve bien pero está mal" tiene que delatarse.
+
+- **Lista blanca de campos.** Sólo se escriben los seis campos declarados en el
+  YAML. La web tiene además Monto Asegurado, Seguro y Doc, que se pisarían sin
+  ruido. Un campo fuera de la lista **aborta la fila** sin tocar la web.
+- **Nada más se movió.** El cargador fotografía *todos* los inputs del
+  formulario antes y después de guardar. Si cambió algo fuera de la lista
+  blanca, la fila se reporta como error aunque el guardado haya funcionado. Así
+  la lista blanca es una defensa verificada, no un comentario.
+- **Read-back.** Después de guardar se reabre el formulario y se compara. Que el
+  submit no explote no significa que el dato entró.
+- **Idempotencia.** Estado por fila en SQLite con clave
+  `(cliente, solicitud, fecha, informante)`. `--dry-run` y `--simular` no anotan
+  nada, justamente para que la corrida real no saltee filas vacías.
+- **Ante la duda, no cargar.** Si dos filas del documento comparten clave, en la
+  web las dos matchean igual: elegir "la primera" escribiría en la fila
+  equivocada. Se informan como conflicto y no se cargan.
+- **Los campos en None no se escriben.** Mandar `""` pisaría con vacío un dato
+  que quizá ya estaba bien.
+
+## Estructura
+
+```
+pipeline/
+  contratos.py           # los enchufes: FichaCruda, Extractor, ItemDeCarga, Cargador
+  cli.py                 # extraer | revisar | cargar
+  jsonl.py               # la costura entre etapas
+  dominio/
+    normalizadores.py    # genérico: fechas, montos, identificadores, texto sucio
+    esquema.py           # <- el dominio del EJEMPLO: Cliente / Referencia / Alerta
+  extractores/
+    comun.py             # lo que comparten todos los formatos
+    pdf_plumber.py       # PDF
+    docx_.py             # DOCX
+  vistas/excel.py        # las tres hojas
+  carga/
+    mapeo.py             # lee config/mapeo_web.yaml
+    items.py             # Cliente -> qué escribir, con qué clave
+    navegador.py         # Playwright + las defensas
+    estado.py            # idempotencia en SQLite
+config/mapeo_web.yaml    # <- lo único que se toca para apuntar a otra web
+web_demo/                # la web falsa de destino (Flask + SQLite)
+demo/
+  datos_fake.py          # los datos y el ground truth
+  generar_pdf_fake.py    # render PDF
+  generar_docx_fake.py   # render DOCX
+tests/verificar_extractor.py
+```
 
 ## Documentación
 
-- **Diseño del sistema**: [`docs/Documento_de_diseño.docx`](docs/Documento_de_diseño.docx)
-- **Manual de uso** (para el operador): [`docs/Manual_de_uso.docx`](docs/Manual_de_uso.docx)
+Las decisiones de diseño y las trampas de cada formato están en
+[`CLAUDE.md`](CLAUDE.md). Los `docs/*.docx` quedaron de una versión anterior del
+proyecto y están desactualizados.

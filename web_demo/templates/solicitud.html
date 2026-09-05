@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block contenido %}
+{% if request.args.get('guardada') %}
+  <div class="aviso" id="aviso-guardado">Fila {{ request.args.get('guardada') }} guardada.</div>
+{% endif %}
+<p><a href="/admin/buscar?cuit={{ cliente.cuit }}">&larr; volver</a></p>
+<h2>{{ cliente.nombre }} <small>({{ cliente.cuit }})</small></h2>
+<h3 id="titulo-solicitud">{{ sol.titulo }}</h3>
+
+<table id="tabla-financieras">
+  <tr>
+    <th>Fecha</th><th>Informante</th><th>Concepto</th><th>Condición</th>
+    <th>Cred. Otorgado</th><th>Cred. Tomado</th><th>Otorg. USD</th>
+    <th>Tomado USD</th><th>Antigüedad</th><th>Monto Asegurado</th>
+    <th>Seguro</th><th>Doc</th><th></th>
+  </tr>
+  {% for f in filas %}
+  <tr class="fila-financiera">
+    <td class="fecha">{{ f.fecha }}</td>
+    <td class="informante">{{ f.informante }}</td>
+    <td>{{ f.concepto }}</td>
+    <td>{{ f.condicion }}</td>
+    <td>{{ f.credito_otorgado }}</td>
+    <td>{{ f.credito_tomado }}</td>
+    <td>{{ f.otorgado_usd }}</td>
+    <td>{{ f.tomado_usd }}</td>
+    <td>{{ f.antiguedad }}</td>
+    <td>{{ f.monto_asegurado }}</td>
+    <td>{{ f.seguro }}</td>
+    <td>{{ f.doc }}</td>
+    <td>
+      <a class="editar" title="Editar"
+         href="/admin/solicitudes/{{ sol.id }}/financieras/{{ f.id }}/edit">✎</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

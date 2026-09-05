@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h2>Buscar cliente</h2>
+<form action="/admin/buscar" method="get" class="campo">
+  <label for="cuit">CUIT</label>
+  <input type="text" id="cuit" name="cuit" value="{{ cuit }}" placeholder="30709204595">
+  <button type="submit" id="buscar">Buscar</button>
+</form>
+
+{% if cuit and not cliente %}
+  <p class="vacio" id="sin-resultados">No se encontró ningún cliente con ese CUIT.</p>
+{% elif cliente %}
+  <h3 id="nombre-cliente">{{ cliente.nombre }} <small>({{ cliente.cuit }})</small></h3>
+  {% if solicitudes %}
+    <table>
+      <tr><th>Solicitud</th><th></th></tr>
+      {% for s in solicitudes %}
+      <tr>
+        <td>{{ s.titulo }}</td>
+        <td><a class="ver-solicitud" href="/admin/solicitudes/{{ s.id }}">ver</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p class="vacio">Este cliente no tiene solicitudes.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}

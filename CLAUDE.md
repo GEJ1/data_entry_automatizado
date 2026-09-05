@@ -1,9 +1,14 @@
-# Proyecto: Carga de Solicitudes Financieras
+# Proyecto: data_entry_automatizado
 
-Pipeline de data entry: PDF (fichas de clientes) → validación/normalización →
-carga en un formulario web. En construcción. Detalle completo en `README.md` y
-en `docs/` (diseño y manual). Este archivo prioriza decisiones, convenciones y
-trampas: lo que NO se deduce leyendo el código.
+Esqueleto genérico de data entry: archivo (PDF/DOCX) → validación/normalización
+→ revisión en Excel → carga en un formulario web. **Es material para un curso**:
+todo es falso (los datos, los documentos y también la web objetivo, que vive en
+`web_demo/`). Este archivo prioriza decisiones y trampas: lo que NO se deduce
+leyendo el código.
+
+El caso que trae implementado —fichas crediticias con referencias comerciales y
+alertas— es **un ejemplo, no el proyecto**. Cuando toque adaptarlo a otro rubro,
+lo que se reescribe es `pipeline/dominio/esquema.py`; el resto queda igual.
 
 ## Principio rector
 
@@ -11,32 +16,62 @@ Convertir errores silenciosos en ruidosos. Un dato que "se ve bien pero está
 mal" tiene que delatarse (validación, reconciliación, read-back), nunca cargarse
 a ciegas. Ante la duda, no cargar: mandar a la vista de problemas.
 
+## Objetivo pedagógico: cada pieza se cambia sola
+
+El valor del repo no es el parser: son las **costuras**. Alguien tiene que poder
+enchufar otro formato de entrada u otra web sin tocar el resto. De ahí:
+
+- `pipeline/contratos.py` define los dos enchufes (`Extractor` y `Cargador`).
+  Leerlo primero: es el mapa.
+- Entre etapa y etapa hay un **archivo en disco** (JSONL), no una llamada de
+  función. Se puede cortar, mirar y retomar.
+- **Otro formato de entrada** = una clase nueva en `pipeline/extractores/` y una
+  línea en su `__init__.py`. Hay dos (PDF y DOCX) justamente para probar que el
+  contrato aguanta: producen FichaCruda idénticas.
+- **Otra web objetivo** = editar `config/mapeo_web.yaml`. Cero código.
+- **Otro dominio** = reescribir `pipeline/dominio/esquema.py`. Los normalizadores
+  de al lado no se tocan: fechas ambiguas, montos con separadores raros e
+  identificadores con dígito verificador aparecen en cualquier data entry.
+
 ## Convenciones
 
 - Comentarios y nombres en español (rioplatense). Sin tildes en identificadores.
-- Python 3.10+. Simple y legible antes que abstracto. No sobre-ingenierizar.
-- NUNCA credenciales, datos reales ni PDFs reales en el repo. Los datos de
-  ejemplo son 100% inventados.
-- Cada eslabón nuevo se prueba en chico (dry-run / un solo cliente) antes de
-  escalar. La parte web se prueba primero en dry-run: llenar el form sin guardar.
+- Python 3.10+ (el `python3` del sistema es 3.8: usar el venv). Simple y legible
+  antes que abstracto. No sobre-ingenierizar.
+- Todo se corre desde la raíz del repo con `python -m pipeline.<modulo>`; así no
+  hacen falta trucos de `sys.path` ni instalar el paquete.
+- NUNCA credenciales ni datos reales. Los datos de ejemplo son 100% inventados.
+- Cada eslabón se prueba en chico (`--limite`, `--dry-run`) antes de escalar.
 
 ## Decisiones de diseño (no cambiar sin motivo explícito)
 
 - **Determinismo**: los valores relativos de antigüedad ("2 meses", "1 año") se
-  anclan a la FECHA DE EMISIÓN del PDF, nunca a `date.today()`. Mismo PDF ⇒ misma
-  salida siempre.
-- **Fuente de verdad = JSON** (JSONL, un cliente por línea). El Excel es una
-  VISTA derivada para revisión humana. Las correcciones NO vuelven editando el
-  Excel: se corrige la regla en el código y se re-corre.
-- **Idempotencia** en la carga: estado por fila en SQLite (pendiente/ok/error),
-  clave compuesta `(cliente, solicitud, fecha, informante)`. Se puede cortar y
-  retomar sin duplicar.
-- **Lista blanca de campos escribibles** en la web: SOLO Condición, Crédito
-  Otorgado, Crédito Tomado, Otorgado USD, Tomado USD, Antigüedad. NUNCA tocar
-  Monto Asegurado, Seguro, Doc, ni eliminar. Intentar escribir fuera de la lista
-  debe abortar la fila, no hacerlo en silencio.
+  anclan a la FECHA DE EMISIÓN del documento, nunca a `date.today()`. Mismo
+  archivo ⇒ misma salida siempre.
+- **Fuente de verdad = JSONL** (un cliente por línea). El Excel es una VISTA
+  derivada. Las correcciones NO vuelven editando el Excel: se corrige la regla
+  en el código y se re-corre.
+- **El extractor no sabe de negocio.** Devuelve cabecera + tablas de texto crudo
+  y nada más. Toda interpretación vive en `pipeline/dominio/`. Es lo que permite
+  que PDF y DOCX compartan el mismo dominio.
+- **Idempotencia**: estado por fila en SQLite (`data/salida/estado_carga.db`),
+  clave compuesta `(cliente, solicitud, fecha, informante)`. Se corta y se
+  retoma sin duplicar. Ojo: `--dry-run` y `--simular` NO anotan estado, porque
+  si anotaran, la corrida real saltearía filas que nunca se escribieron.
+- **Lista blanca de campos escribibles**: SOLO Condición, Crédito Otorgado,
+  Crédito Tomado, Otorgado USD, Tomado USD, Antigüedad (`campos` en el YAML).
+  NUNCA Monto Asegurado, Seguro ni Doc. Está verificada, no declamada: el
+  cargador fotografía todos los inputs antes y después y falla si se movió algo
+  fuera de la lista.
+- **Read-back**: después de guardar se reabre el formulario y se compara. Que el
+  submit no explote no significa que el dato entró.
+- **Campos en None no se escriben** (no se manda ""): pisar con vacío un dato
+  que ya estaba bien es el error que no se nota hasta que es tarde.
 
-## Reglas de dominio (implementadas en `src/esquema.py`, respetarlas)
+## Reglas del dominio de EJEMPLO (en `pipeline/dominio/`, respetarlas)
+
+Valen para el caso crediticio que trae el repo. Si se adapta a otro rubro, esta
+sección entera se reemplaza; las de arriba y abajo no.
 
 - **Antigüedad**: matcher de prioridad, gana el primer patrón que matchea:
   `d/m/aaaa`; `m/aaaa` (día=01); `m/aa` (día=01, siglo por pivote 26: 00–26⇒20xx,
@@ -44,45 +79,52 @@ a ciegas. Ante la duda, no cargar: mandar a la vista de problemas.
   número de 1–3 dígitos (⇒ N años); palabra sola / "-" / "n/c" ⇒ None.
 - **Plazo**: válido 0–90 (son cuotas). No numérico o fuera de rango (ej. "3060")
   ⇒ campo None + marca de problema; la fila igual se carga.
-- **Inactivo = "Sí"**: descartar esa fila de referencia entera (exclusión
-  legítima, no error). Contarla aparte para reconciliar.
+- **Inactivo = "Sí"**: descartar esa fila entera (exclusión legítima, no error).
+  Se cuenta en `Cliente.descartadas` para reconciliar.
 - **CUIT**: clave del cliente, con dígito verificador. Inválido NO bloquea ni
   rompe: se carga y se marca (`cuit_ok`). Un cliente nunca desaparece en silencio.
 - **Montos**: coma = miles, punto = decimal ("23,000"→23000; "10044.71"→10044.71).
+- **Claves duplicadas**: si dos referencias comparten
+  `(cliente, solicitud, fecha, informante)`, NO se cargan. En la web las dos
+  filas matchean igual y elegir "la primera" escribe en la fila equivocada.
 
-## Estructura del PDF de entrada (clave para el parser)
+## Trampas de cada formato (por qué el extractor es así)
 
-- Una ficha por cliente. Encabezado `Cliente: NOMBRE (CUIT: XXXXXXXXXXX)` +
-  `Fecha de Emisión`.
-- Sección "1. Solicitudes de Referencia": 12 columnas, subagrupada por filas
-  "Solicitud hecha el X por Y". Puede decir "No hay...".
-- Sección "2. Alertas / Denuncias": 6 columnas. Puede decir "No hay...".
-- Las fichas SE DERRAMAN a varias páginas y las de continuación NO repiten el
-  encabezado del cliente (sí repiten los encabezados de columna). El parser debe
-  streamear el documento entero y cortar por el encabezado `Cliente:(CUIT:)`.
-  Nunca procesar página por página de forma aislada.
-- El PDF es nativo (texto seleccionable). Usar `pdfplumber`.
+- **Las fichas se derraman** a varias páginas y la continuación NO repite el
+  encabezado del cliente (sí los encabezados de columna). Se streamea el
+  documento entero y se corta por `Cliente: ... (CUIT: ...)`. Nunca página por
+  página de forma aislada.
+- **Qué tabla es cuál** se decide por sus ENCABEZADOS ("Informante" ⇒
+  referencias, "Alertante" ⇒ alertas), no por el título de sección: la página de
+  continuación no lo repite.
+- **PDF**: el título del subgrupo ("Solicitud hecha el X por Y") es una celda
+  combinada y `extract()` lo devuelve **truncado** al ancho de la primera
+  columna. Hay que rescatarlo de las líneas de texto cruzando por posición
+  vertical (`_titulo_subgrupo`). Importa: la solicitud es parte de la clave.
+- **DOCX**: la misma celda combinada se devuelve **repetida** en las 12
+  columnas. Además `doc.paragraphs` y `doc.tables` pierden el orden entre sí:
+  hay que recorrer el cuerpo del XML a mano (`_bloques`).
 
 ## Estado
 
-- LISTO: `src/esquema.py` (validación/normalización). Smoke test: `python src/esquema.py`.
-- LISTO: `demo/generar_pdf_fake.py` (PDFs de prueba con trampas sembradas;
-  imprime un manifiesto; flags `--clientes N`, `--salida`).
-- PENDIENTE: parser de extracción (PDF → dicts crudos → modelos de `esquema.py`).
-- PENDIENTE: vistas Excel (resumen / detalle / problemas) generadas desde el JSONL.
-- PENDIENTE: carga web con Playwright (descubrimiento + carga idempotente).
+Todo el pipeline anda end-to-end contra `web_demo/`.
 
-## Pregunta de diseño abierta (bloquea SOLO la parte web)
+| Etapa | Estado |
+|---|---|
+| Normalizadores + dominio | listo, smoke tests propios |
+| Extractor PDF (pdfplumber) | listo, 300/300 fichas vs ground truth |
+| Extractor DOCX (python-docx) | listo, 300/300, salida idéntica al PDF |
+| Vistas Excel (3 hojas) | listo |
+| Web demo (Flask + SQLite) | listo |
+| Carga web (Playwright) | listo: 73/73 con read-back, idempotente |
 
-Cómo se llega del CUIT a la solicitud del cliente en la web para armar la URL de
-edición `/admin/solicitudes/{id}/financieras/{id}/edit`. Ninguno de los dos IDs
-está en el PDF. Hay un buscador por CUIT (falta confirmar si su URL es
-templateable). El id de fila SIEMPRE se cosecha del `href` del lápiz de la tabla.
-Ver "Lo que falta definir" en `docs/Documento_de_diseño.docx`.
+Verificación: el generador emite un **ground truth** (`<archivo>.verdad.json`)
+con lo que el extractor debería devolver, y `tests/verificar_extractor.py`
+compara. Mirar columnas a ojo no escala más allá del tercer cliente.
 
-## Próximo paso sugerido
+## Lo que quedó pendiente
 
-Construir el parser contra los PDFs que genera `demo/generar_pdf_fake.py`.
-Empezar por un cliente, verificar columnas a ojo, y recién ahí escalar. Ideal:
-que el generador emita también un "ground truth" para verificar el parser
-automáticamente.
+- Las trampas sembradas de **alertas** se extraen y se validan, pero no se
+  cargan en la web: la web demo sólo tiene el formulario de referencias.
+- `docs/*.docx` (diseño y manual) quedaron de la versión anterior y describen un
+  proyecto con web real. Están desactualizados.
