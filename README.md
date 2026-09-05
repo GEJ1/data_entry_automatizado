@@ -15,6 +15,14 @@ mismo: cambia un archivo.
 > datos reales ni credenciales, y no hace falta acceso a ningún sistema externo:
 > se clona, se instala y corre entero de punta a punta.
 
+[![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GEJ1/data_entry_automatizado/blob/main/curso.ipynb)
+
+**[`curso.ipynb`](curso.ipynb)** recorre todo el pipeline paso a paso, con las
+celdas ya escritas: genera los documentos, verifica el extractor, levanta la web
+y carga las filas. Corre igual en Colab y en local. Como la máquina de Colab no
+tiene pantalla, la web se ve con capturas que saca Playwright; si lo corrés en tu
+máquina podés además mirar el navegador en vivo con `--ver --lento`.
+
 ## La idea
 
 Lo interesante no es el parser: es que **cada pieza se pueda cambiar sola**.
@@ -238,7 +246,9 @@ demo/
   datos_fake.py          # los datos y el ground truth
   generar_pdf_fake.py    # render PDF
   generar_docx_fake.py   # render DOCX
+  captura.py             # screenshot de la web (lo usa el cuaderno)
 tests/verificar_extractor.py
+curso.ipynb              # el recorrido completo, ejecutable
 ```
 
 ## Documentación
