@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Salidas generadas (se regeneran)
+data/salida/*
+!data/salida/.gitkeep
+data/entrada/*
+!data/entrada/.gitkeep
+*.pdf
+
+# Estado de carga (se regenera)
+*.db
+*.sqlite
+*.sqlite3
+
+# SO / editores
+.DS_Store
+.idea/
+.vscode/
