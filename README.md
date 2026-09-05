@@ -178,6 +178,5 @@ tests/verificar_extractor.py
 
 ## Documentación
 
-Las decisiones de diseño y las trampas de cada formato están en
-[`CLAUDE.md`](CLAUDE.md). Los `docs/*.docx` quedaron de una versión anterior del
-proyecto y están desactualizados.
+Las decisiones de diseño, las reglas del dominio de ejemplo y las trampas de
+cada formato están en [`CLAUDE.md`](CLAUDE.md).

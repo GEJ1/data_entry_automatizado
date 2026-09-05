@@ -124,7 +124,6 @@ compara. Mirar columnas a ojo no escala más allá del tercer cliente.
 
 ## Lo que quedó pendiente
 
-- Las trampas sembradas de **alertas** se extraen y se validan, pero no se
-  cargan en la web: la web demo sólo tiene el formulario de referencias.
-- `docs/*.docx` (diseño y manual) quedaron de la versión anterior y describen un
-  proyecto con web real. Están desactualizados.
+- Las **alertas** se extraen y se validan, pero no se cargan en la web: la web
+  demo sólo tiene el formulario de referencias. Queda como ejercicio guiado
+  para el curso: los datos ya están en el JSONL y el contrato ya está definido.

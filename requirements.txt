@@ -1,11 +1,18 @@
+# Dominio y validacion
 pydantic>=2.0
 python-dateutil>=2.8
-reportlab>=4.0
-pdfplumber>=0.11
-# Para la etapa de carga web (aún no implementada) se sumará:
-# playwright>=1.40   (requiere además: playwright install)
-python-docx>=1.1
-openpyxl>=3.1
-flask>=3.0
-pyyaml>=6.0
-playwright>=1.40   # requiere ademas: playwright install chromium
+
+# Extraccion (uno por formato de entrada)
+pdfplumber>=0.11      # extractores/pdf_plumber.py
+python-docx>=1.1      # extractores/docx_.py
+
+# Vistas de revision
+openpyxl>=3.1         # vistas/excel.py
+
+# Carga web
+playwright>=1.40      # requiere ademas: playwright install chromium
+pyyaml>=6.0           # config/mapeo_web.yaml
+
+# Demo: generar los documentos falsos y la web objetivo
+reportlab>=4.0        # demo/generar_pdf_fake.py
+flask>=3.0            # web_demo/app.py
