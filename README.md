@@ -258,6 +258,7 @@ demo/
   generar_pdf_fake.py    # render PDF
   generar_docx_fake.py   # render DOCX
   captura.py             # screenshot de la web (lo usa el cuaderno)
+  reconocer_web.py       # lee una página y arma el borrador del mapeo
 tests/verificar_extractor.py
 01_metodo.ipynb          # el método
 02_construir.ipynb       # el taller: lo construís vos

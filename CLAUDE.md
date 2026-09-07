@@ -78,6 +78,13 @@ enchufar otro formato de entrada u otra web sin tocar el resto. De ahí:
   submit no explote no significa que el dato entró.
 - **Campos en None no se escriben** (no se manda ""): pisar con vacío un dato
   que ya estaba bien es el error que no se nota hasta que es tarde.
+- **Herramienta vs criterio.** `demo/reconocer_web.py` extrae de una página lo
+  que es mecánico (ids, clases, hrefs, `readonly`, el patrón de la URL de
+  edición); eso no necesita un modelo, necesita mirar el DOM. Lo que sí necesita
+  criterio —qué significa cada campo, cuál es de otro sistema, qué identifica
+  unívocamente una fila— queda para una persona. Por eso el borrador de YAML
+  sale con **la lista blanca entera comentada**: una lista blanca generada
+  automáticamente es una lista negra escrita al revés.
 
 ## Reglas del dominio de EJEMPLO (en `pipeline/dominio/`, respetarlas)
 
