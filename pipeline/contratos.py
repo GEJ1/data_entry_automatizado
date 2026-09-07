@@ -54,12 +54,6 @@ class FichaCruda:
         """Para serializar a JSONL (la costura entre etapa 1 y etapa 2)."""
         return {"cabecera": self.cabecera, "tablas": self.tablas, "origen": self.origen}
 
-    @classmethod
-    def de_dict(cls, d: dict) -> "FichaCruda":
-        return cls(cabecera=d.get("cabecera", {}),
-                   tablas=d.get("tablas", {}),
-                   origen=d.get("origen", ""))
-
 
 @runtime_checkable
 class Extractor(Protocol):

@@ -12,7 +12,6 @@ cortado a la mitad sigue siendo legible hasta donde llego.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -34,8 +33,3 @@ def leer(entrada: str | Path) -> Iterator[Cliente]:
             linea = linea.strip()
             if linea:
                 yield Cliente.model_validate_json(linea)
-
-
-def leer_crudo(entrada: str | Path) -> list[dict]:
-    """Las lineas sin validar. Util para inspeccionar un JSONL sospechoso."""
-    return [json.loads(l) for l in Path(entrada).read_text(encoding="utf-8").splitlines() if l.strip()]
